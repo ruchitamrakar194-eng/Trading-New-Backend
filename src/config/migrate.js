@@ -866,6 +866,34 @@ const runMigrations = async () => {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // ─── 17. SCRIPT TESTING & COMMODITY LOT SIZES ─────────────────────────────
+
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS script_testing (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tradingsymbol VARCHAR(100) DEFAULT NULL,
+            name VARCHAR(100) DEFAULT NULL,
+            instrument_token INT DEFAULT NULL,
+            instrument_type VARCHAR(20) DEFAULT NULL,
+            exchange VARCHAR(20) DEFAULT NULL,
+            expiry VARCHAR(50) DEFAULT NULL,
+            lot_size INT DEFAULT 1,
+            ltp DECIMAL(10,2) DEFAULT NULL,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS commodity_forex_crypto_lot_sizes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            symbol VARCHAR(100) NOT NULL UNIQUE,
+            category VARCHAR(50) NOT NULL,
+            lot_size DECIMAL(18,6) NOT NULL DEFAULT 1.000000,
+            usdinr_value DECIMAL(18,6) NOT NULL DEFAULT 83.500000,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     // ─── PERFORMANCE INDEXES ───────────────────────────────────────────────────
     console.log('\n📊 Adding performance indexes...');
 
@@ -907,7 +935,8 @@ const runMigrations = async () => {
         'users', 'ip_logins', 'trades', 'paper_positions', 'notifications',
         'paper_orders', 'paper_trades', 'ledger', 'payment_requests',
         'signals', 'action_ledger', 'scrip_data', 'support_tickets',
-        'ticket_messages', 'voice_recordings', 'new_client_bank'
+        'ticket_messages', 'voice_recordings', 'new_client_bank',
+        'script_testing', 'commodity_forex_crypto_lot_sizes'
     ];
 
     for (const table of criticalTables) {
