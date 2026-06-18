@@ -7,7 +7,7 @@ const { uploadFile } = require('../utils/imagekit');
 // Tables are now created by src/config/migrate.js on server startup.
 
 // ─── UPLOAD SETUP ─────────────────────────────────
-// Use memoryStorage so files are buffered in memory for ImageKit upload
+// Use memoryStorage so files are buffered in memory for ImageKit uplo
 const storage = multer.memoryStorage();
 
 const upload = multer({
