@@ -65,25 +65,30 @@ class CommodityLotService {
     }
 
     /**
-     * Calculate PnL for COMMODITY based on DB stored lot size and USDINR
+     * Calculate PnL for COMMODITY using live USD/INR bid/ask from MarketDataService.
+     * - Loss  → use bid  (which FastForex sets as ltp × 1.10)
+     * - Profit → use ask (which FastForex sets as ltp × 0.90)
+     * Falls back to DB usdinr_value if live data is unavailable.
      */
     calculatePnL(symbol, type, entryPrice, cmp, qty) {
         const info = this.getLotInfo(symbol);
-        // Fallback defaults if not in DB
         const lotSize = info ? info.lot_size : 1;
-        let baseUsdInr = info ? info.usdinr_value : 95.1;
+        const fallbackUsdInr = info ? info.usdinr_value : 95.1;
 
-        // Try to get live USDINR rate from MarketDataService
+        // Get live USD/INR bid & ask from MarketDataService
+        let liveBid = null;
+        let liveAsk = null;
         try {
             const marketDataService = require('./MarketDataService');
             if (marketDataService && marketDataService.prices) {
                 const liveUsdInr = marketDataService.prices['FOREX:USD/INR'] || marketDataService.prices['FOREX:USDINR'];
                 if (liveUsdInr) {
-                    baseUsdInr = parseFloat(liveUsdInr.ltp || (liveUsdInr.ask ? liveUsdInr.ask / 0.9 : (liveUsdInr.bid ? liveUsdInr.bid / 1.1 : baseUsdInr)));
+                    liveBid = parseFloat(liveUsdInr.bid) || null; // ltp × 1.10 (set by FastForex)
+                    liveAsk = parseFloat(liveUsdInr.ask) || null; // ltp × 0.90 (set by FastForex)
                 }
             }
         } catch (e) {
-            // Silently fall back to DB stored value
+            // Silently fall back
         }
 
         const cmpNum = parseFloat(cmp || 0);
@@ -97,14 +102,13 @@ class CommodityLotService {
             pnlUsd = (entryNum - cmpNum) * lotSize * qtyNum;
         }
 
-        // Client rule:
-        // Profit (pnlUsd > 0) -> use 10% lower USD/INR rate (baseUsdInr * 0.90)
-        // Loss (pnlUsd <= 0) -> use 10% higher USD/INR rate (baseUsdInr * 1.10)
-        let usdInrVal = baseUsdInr;
+        // Loss  → bid  (ltp × 1.10) — higher rate, user pays more on loss
+        // Profit → ask (ltp × 0.90) — lower rate, user gets less on profit
+        let usdInrVal;
         if (pnlUsd > 0) {
-            usdInrVal = baseUsdInr * 0.90;
+            usdInrVal = liveAsk || (fallbackUsdInr * 0.90);
         } else {
-            usdInrVal = baseUsdInr * 1.10;
+            usdInrVal = liveBid || (fallbackUsdInr * 1.10);
         }
 
         const pnlInr = pnlUsd * usdInrVal;
