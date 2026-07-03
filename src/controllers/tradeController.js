@@ -1815,11 +1815,9 @@ const getActivePositions = async (req, res) => {
                         const marketDataService = require('../services/MarketDataService');
                         const liveUsdInr = marketDataService.prices['FOREX:USD/INR'] || marketDataService.prices['FOREX:USDINR'];
                         if (liveUsdInr) {
-                            if (pos.type.toUpperCase() === 'BUY') {
-                                pos.usdinr_value = parseFloat(liveUsdInr.ask || liveUsdInr.ltp || pos.usdinr_value);
-                            } else {
-                                pos.usdinr_value = parseFloat(liveUsdInr.bid || liveUsdInr.ltp || pos.usdinr_value);
-                            }
+                            // Send the unadjusted base rate (ltp). The mobile app applies
+                            // the 10% premium/discount based on actual profit/loss direction.
+                            pos.usdinr_value = parseFloat(liveUsdInr.ltp || pos.usdinr_value);
                         }
                     } catch (e) {}
                 }
@@ -1932,11 +1930,9 @@ const getTrades = async (req, res) => {
                         const marketDataService = require('../services/MarketDataService');
                         const liveUsdInr = marketDataService.prices['FOREX:USD/INR'] || marketDataService.prices['FOREX:USDINR'];
                         if (liveUsdInr) {
-                            if (trade.type.toUpperCase() === 'BUY') {
-                                trade.usdinr_value = parseFloat(liveUsdInr.ask || liveUsdInr.ltp || trade.usdinr_value);
-                            } else {
-                                trade.usdinr_value = parseFloat(liveUsdInr.bid || liveUsdInr.ltp || trade.usdinr_value);
-                            }
+                            // Send the unadjusted base rate (ltp). The mobile app applies
+                            // the 10% premium/discount based on actual profit/loss direction.
+                            trade.usdinr_value = parseFloat(liveUsdInr.ltp || trade.usdinr_value);
                         }
                     } catch (e) {}
                 }
@@ -1988,7 +1984,14 @@ const getTrades = async (req, res) => {
                             if (commodityLotService.isCommodityScrip(trade.symbol, trade.market_type)) {
                                 const calc = commodityLotService.calculatePnL(trade.symbol, trade.type, trade.entry_price, currentPrice, trade.qty);
                                 trade.pnl = calc.pnlInr;
-                                trade.usdinr_value = calc.usdInr;
+                                // Send the base rate (divide out the 10% adjustment) so the
+                                // mobile app can apply the 10% rule itself based on P/L direction.
+                                // calc.usdInr is already adjusted (base * 1.10 or base * 0.90).
+                                // We recover the base by reversing: if pnl < 0 → base = calc.usdInr / 1.10, else / 0.90
+                                const baseRate = calc.pnlInr < 0
+                                    ? calc.usdInr / 1.10
+                                    : calc.usdInr / 0.90;
+                                trade.usdinr_value = baseRate;
                             } else {
                                 const lotSize = parseFloat(trade.lot_size_at_entry || 1);
                                 const qtyForPnl = trade.qty * lotSize;
