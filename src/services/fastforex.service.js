@@ -82,9 +82,16 @@ class FastForexService {
     }
 
     formatForexData(instrument, price) {
-        const bid = price;
-        const ask = price;
+        let bid = price;
+        let ask = price;
         const ltp = this.calculateLTP(bid, ask);
+
+        // Special client rule for USDINR: Ask 10% lower, Bid 10% higher
+        if (instrument === 'USD/INR' || instrument === 'USDINR') {
+            const basePrice = ltp || bid || ask || 95.1;
+            ask = basePrice * 0.90;
+            bid = basePrice * 1.10;
+        }
 
         let prevPrice = this.previousPrices[instrument];
         if (!prevPrice) {

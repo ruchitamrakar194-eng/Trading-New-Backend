@@ -12,6 +12,9 @@ const formatCommodityData = (instrument, data) => {
         } else if (instrument.toLowerCase() === 'silver') {
             formattedInstrument = 'XAG/USD';
         }
+        // Mini/Custom symbols: XAUUSDM, MXAU, XAGUSDM, MXAG, USOILM, MUSOIL, NGASM, MNGAS
+        // These are passed directly from the mini alias broadcast — keep them as-is
+        // (They don't match GOLD/Silver/USOIL/NGAS so no mapping needed)
     }
 
     const bid = parseFloat(data.bid || data.price || 0);

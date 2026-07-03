@@ -67,16 +67,13 @@ class MarketDataService extends EventEmitter {
             FOREX_SYMBOLS_LIST = forexRows.map(r => r.symbol);
             console.log(`[MarketDataService] Loaded ${FOREX_SYMBOLS_LIST.length} forex symbols from DB`);
 
-            // Load Commodity (ONLY GOLD, SILVER, USOIL and NGAS)
+            // Load all Commodity symbols (including Mini and Custom variants)
             const [commodityRows] = await db.execute(`
                 SELECT symbol FROM market_group_items mgi
                 JOIN market_groups mg ON mgi.group_id = mg.id
                 WHERE mg.name = 'COMMODITY'
             `);
-            const allowedCommodities = ['XAU/USD', 'XAG/USD', 'USOIL', 'NGAS'];
-            COMMODITY_SYMBOLS_LIST = commodityRows
-                .map(r => r.symbol)
-                .filter(sym => allowedCommodities.includes(sym));
+            COMMODITY_SYMBOLS_LIST = commodityRows.map(r => r.symbol);
             console.log(`[MarketDataService] Loaded ${COMMODITY_SYMBOLS_LIST.length} commodity symbols from DB`);
 
             // Load All Metadata
@@ -491,9 +488,9 @@ class MarketDataService extends EventEmitter {
         if (COMMODITY_SYMBOLS_LIST && COMMODITY_SYMBOLS_LIST.length > 0) {
             return COMMODITY_SYMBOLS_LIST.map(sym => this.prices[`COMMODITY:${sym}`]).filter(Boolean);
         }
-        // Fallback: scan prices — keep only slashed symbols to avoid unslashed duplicates
+        // Fallback: scan all COMMODITY: prefixed prices
         return Object.values(this.prices).filter(p =>
-            p?.symbol?.startsWith('COMMODITY:') && p.symbol.includes('/')
+            p?.symbol?.startsWith('COMMODITY:')
         );
     }
 

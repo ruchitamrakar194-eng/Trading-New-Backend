@@ -23,10 +23,17 @@ const formatForexData = (instrument, data) => {
         }
     }
 
-    const bid = parseFloat(data.bid || data.price || 0);
-    const ask = parseFloat(data.ask || data.price || 0);
+    let bid = parseFloat(data.bid || data.price || 0);
+    let ask = parseFloat(data.ask || data.price || 0);
     // LTP priority: real trade-tick ltp > real price field > mid-price formula
     const ltp = data.ltp || (data.price ? parseFloat(data.price) : 0) || (bid + ask) / 2;
+
+    // Special client rule for USDINR: Ask 10% lower, Bid 10% higher
+    if (formattedInstrument === 'USD/INR' || formattedInstrument === 'USDINR') {
+        const basePrice = ltp || bid || ask || 95.1;
+        ask = basePrice * 0.90;
+        bid = basePrice * 1.10;
+    }
 
     // Change calculation if not provided directly
     let change = data.change || 0;

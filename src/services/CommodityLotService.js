@@ -71,21 +71,15 @@ class CommodityLotService {
         const info = this.getLotInfo(symbol);
         // Fallback defaults if not in DB
         const lotSize = info ? info.lot_size : 1;
-        let usdInr = info ? info.usdinr_value : 95.1;
+        let baseUsdInr = info ? info.usdinr_value : 95.1;
 
-        // Try to get live USDINR rate from MarketDataService based on BUY/SELL position
+        // Try to get live USDINR rate from MarketDataService
         try {
             const marketDataService = require('./MarketDataService');
             if (marketDataService && marketDataService.prices) {
                 const liveUsdInr = marketDataService.prices['FOREX:USD/INR'] || marketDataService.prices['FOREX:USDINR'];
                 if (liveUsdInr) {
-                    if (type.toUpperCase() === 'BUY') {
-                        // BUY Position -> use Ask rate of USD/INR
-                        usdInr = parseFloat(liveUsdInr.ask || liveUsdInr.ltp || usdInr);
-                    } else {
-                        // SELL Position -> use Bid rate of USD/INR
-                        usdInr = parseFloat(liveUsdInr.bid || liveUsdInr.ltp || usdInr);
-                    }
+                    baseUsdInr = parseFloat(liveUsdInr.ltp || (liveUsdInr.ask ? liveUsdInr.ask / 0.9 : (liveUsdInr.bid ? liveUsdInr.bid / 1.1 : baseUsdInr)));
                 }
             }
         } catch (e) {
@@ -103,12 +97,22 @@ class CommodityLotService {
             pnlUsd = (entryNum - cmpNum) * lotSize * qtyNum;
         }
 
-        const pnlInr = pnlUsd * usdInr;
+        // Client rule:
+        // Profit (pnlUsd > 0) -> use 10% lower USD/INR rate (baseUsdInr * 0.90)
+        // Loss (pnlUsd <= 0) -> use 10% higher USD/INR rate (baseUsdInr * 1.10)
+        let usdInrVal = baseUsdInr;
+        if (pnlUsd > 0) {
+            usdInrVal = baseUsdInr * 0.90;
+        } else {
+            usdInrVal = baseUsdInr * 1.10;
+        }
+
+        const pnlInr = pnlUsd * usdInrVal;
         return {
             pnlUsd,
             pnlInr,
             lotSize,
-            usdInr
+            usdInr: usdInrVal
         };
     }
 }

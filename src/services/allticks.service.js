@@ -59,6 +59,14 @@ class AllTickService {
         this.cache = {};
         this.prevCloseCache = {};
         this.ltpCache = {}; // Real LTP from trade-tick endpoint
+        // Maps AllTick codes to DB symbols sharing that code (original + mini only)
+        this.commodityMiniMapping = {
+            'GOLD':   ['XAU/USD', 'XAUUSDM'],
+            'Silver': ['XAG/USD', 'XAGUSDM'],
+            'USOIL':  ['USOIL',   'USOILM'],
+            'NGAS':   ['NGAS',    'NGASM'],
+            'COPPER': ['COPPER',  'COPPERM']
+        };
     }
 
     // Load symbols from database (dynamic, not hardcoded)
@@ -101,21 +109,43 @@ class AllTickService {
                 }).filter(Boolean);
             }
 
-            // Load Commodity symbols from DB and convert to AllTick format (ONLY GOLD, SILVER, USOIL and NGAS)
+            // Load Commodity symbols from DB and convert to AllTick format
+            // Mini/Custom symbols map to the same AllTick code as their parent
             const [commodityRows] = await db.execute(`
                 SELECT symbol FROM market_group_items mgi
                 JOIN market_groups mg ON mgi.group_id = mg.id
                 WHERE mg.name = 'COMMODITY'
             `);
             if (commodityRows.length > 0) {
-                this.commoditySymbols = commodityRows.map(r => {
+                const allTickCodes = new Set();
+                const miniMapping = {}; // AllTick code → array of DB symbols that share it
+
+                for (const r of commodityRows) {
                     const sym = r.symbol || '';
-                    if (sym === 'XAU/USD') return 'GOLD';
-                    if (sym === 'XAG/USD') return 'Silver';
-                    if (sym === 'USOIL') return 'USOIL';
-                    if (sym === 'NGAS') return 'NGAS';
-                    return null;
-                }).filter(Boolean);
+                    let code = null;
+
+                    // Direct parents
+                    if (sym === 'XAU/USD') code = 'GOLD';
+                    else if (sym === 'XAG/USD') code = 'Silver';
+                    else if (sym === 'USOIL') code = 'USOIL';
+                    else if (sym === 'NGAS') code = 'NGAS';
+                    else if (sym === 'COPPER') code = 'COPPER';
+                    // Mini versions — map to same AllTick code
+                    else if (sym === 'XAUUSDM') code = 'GOLD';
+                    else if (sym === 'XAGUSDM') code = 'Silver';
+                    else if (sym === 'USOILM') code = 'USOIL';
+                    else if (sym === 'NGASM') code = 'NGAS';
+                    else if (sym === 'COPPERM') code = 'COPPER';
+
+                    if (code) {
+                        allTickCodes.add(code);
+                        if (!miniMapping[code]) miniMapping[code] = [];
+                        miniMapping[code].push(sym);
+                    }
+                }
+
+                this.commoditySymbols = Array.from(allTickCodes);
+                this.commodityMiniMapping = miniMapping; // Store for use in _processTick
             }
         } catch (err) {
             console.error('[ALLTICKS] Failed to load symbols from DB:', err.message);
@@ -428,6 +458,24 @@ class AllTickService {
             const formatted = formatCommodityData(symbol, dataToFormat);
             this.cache[symbol] = formatted;
             this._broadcast(formatted);
+
+            // Also broadcast to all Mini/Custom aliases that share this AllTick code
+            const mapping = this.commodityMiniMapping || {};
+            const aliases = mapping[symbol] || [];
+            for (const dbSymbol of aliases) {
+                // Skip the canonical symbol itself (already broadcasted above)
+                const canonicalDbSymbol = (() => {
+                    if (symbol === 'GOLD') return 'XAU/USD';
+                    if (symbol === 'Silver') return 'XAG/USD';
+                    return symbol; // USOIL, NGAS, COPPER are same as AllTick code
+                })();
+                if (dbSymbol === canonicalDbSymbol) continue;
+
+                // Create a copy with the mini/custom symbol name
+                const aliasFormatted = formatCommodityData(dbSymbol, dataToFormat);
+                this.cache[`MINI_${dbSymbol}`] = aliasFormatted;
+                this._broadcast(aliasFormatted);
+            }
         }
     }
 
