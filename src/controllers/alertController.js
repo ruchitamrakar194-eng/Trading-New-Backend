@@ -58,6 +58,10 @@ const createAlert = async (req, res) => {
         const alertId = result.insertId;
         console.log(`[Alert] ✅ Created alert #${alertId} for ${symbol} ${type} ₹${price}`);
 
+        // ✅ Invalidate in-memory alert cache
+        const alertMonitor = require('../services/alertMonitorService');
+        alertMonitor.invalidateCache();
+
         res.json({
             id: alertId,
             user_id: userId,

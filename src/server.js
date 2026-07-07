@@ -1,4 +1,4 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 
 // Prevent server crash on unhandled network or rejection errors (e.g. during internet drop)
 process.on('unhandledRejection', (reason, promise) => {
@@ -8,6 +8,24 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (err) => {
     console.error('⚠️ [Global] Uncaught Exception:', err.message);
 });
+
+// Clean exit handlers to prevent orphaned processes holding DB connections on Windows/nodemon
+const gracefulShutdown = async (signal) => {
+    console.log(`🔌 [Global] Received ${signal}. Shutting down gracefully...`);
+    try {
+        const db = require('./config/db');
+        if (db && typeof db.end === 'function') {
+            await db.end();
+            console.log('✅ Database pool closed.');
+        }
+    } catch (err) {
+        console.error('⚠️ Error closing DB pool during shutdown:', err.message);
+    }
+    process.exit(0);
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 const express = require('express');
 const http = require('http');
@@ -152,14 +170,14 @@ async function syncKiteInstrumentsOnStartup() {
     }
 }
 
-// Run DB migrations first, then start server
+// Start server immediately so port 5000 binds instantly (prevents connection drops during nodemon restarts)
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${PORT} (0.0.0.0)`);
+});
+
+// Run DB migrations asynchronously in background
 runMigrations()
     .then(async () => {
-        // Start server immediately so Railway health checks pass
-        server.listen(PORT, '0.0.0.0', () => {
-            console.log(`🚀 Server running on port ${PORT} (0.0.0.0)`);
-        });
-
         // Run background initializations without blocking server startup
         initializeCache().catch(e => console.error('[Cache] Init failed:', e.message));
         syncKiteInstrumentsOnStartup().catch(e => console.error('[Sync] Init failed:', e.message));
@@ -175,14 +193,14 @@ runMigrations()
         const rmsService = require('./services/RMSService');
         const { startTargetSLMonitoring } = require('./services/targetSLService');
         const { startAlertMonitoring } = require('./services/alertMonitoringService');
-        const { startPendingOrderMonitoring } = require('./services/PendingOrderService'); // ✅ New Service
+        const { startPendingOrderMonitoring } = require('./services/PendingOrderService');
 
         startExpirySquareOffJob();
         startRolloverMarginJob();
         rmsService.start(10000); // Check risk every 10 seconds
         startTargetSLMonitoring(); // Monitor target/SL every 5 seconds
         startAlertMonitoring(); // Monitor price alerts every 3 seconds
-        startPendingOrderMonitoring(); // ✅ Monitor pending orders every 3 seconds
+        startPendingOrderMonitoring(); // Monitor pending orders every 3 seconds
         
         // Start weekly closing/settlement auto-cron job
         const { startWeeklySettlementJob } = require('./services/WeeklySettlementService');
@@ -210,8 +228,7 @@ runMigrations()
         }
     })
     .catch((err) => {
-        console.error('❌ Migration failed, server not started:', err.message);
-        process.exit(1);
+        console.error('❌ Migration or background startup failed:', err.message);
     });
 
 // Trigger nodemon restart - Robust Non-Blocking Margin Service active

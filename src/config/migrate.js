@@ -5,14 +5,42 @@
 
 const db = require('./db');
 
+let existingColumns = new Set();
+let existingIndexes = new Set();
+let informationFetched = false;
+
+const fetchSchemaInfoOnce = async () => {
+    if (informationFetched) return;
+    try {
+        const [columnsInfo] = await db.execute(
+            `SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()`
+        );
+        existingColumns = new Set(columnsInfo.map(row => `${row.TABLE_NAME.toLowerCase()}.${row.COLUMN_NAME.toLowerCase()}`));
+        
+        const [indexesInfo] = await db.execute(
+            `SELECT TABLE_NAME, INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE()`
+        );
+        existingIndexes = new Set(indexesInfo.map(row => `${row.TABLE_NAME.toLowerCase()}.${row.INDEX_NAME.toLowerCase()}`));
+        informationFetched = true;
+    } catch (err) {
+        console.error('⚠️ Failed to fetch schema info from information_schema:', err.message);
+    }
+};
+
 // Helper: ALTER TABLE and silently ignore if column already exists (errno 1060)
 const addColumn = async (table, column, definition) => {
+    await fetchSchemaInfoOnce();
+    const key = `${table.toLowerCase()}.${column.toLowerCase()}`;
+    if (existingColumns.has(key)) {
+        return; // Already exists, skip
+    }
     try {
         await db.execute(`ALTER TABLE \`${table}\` ADD COLUMN ${column} ${definition}`);
         console.log(`  ✅ Added column ${table}.${column}`);
+        existingColumns.add(key);
     } catch (err) {
         if (err.errno === 1060 || err.code === 'ER_DUP_FIELDNAME') {
-            // column already exists — fine
+            existingColumns.add(key);
         } else {
             console.error(`  ⚠️  ${table}.${column}: ${err.message}`);
         }
@@ -21,12 +49,18 @@ const addColumn = async (table, column, definition) => {
 
 // Helper: CREATE INDEX and silently ignore if index already exists (errno 1061)
 const addIndex = async (table, indexName, columns) => {
+    await fetchSchemaInfoOnce();
+    const key = `${table.toLowerCase()}.${indexName.toLowerCase()}`;
+    if (existingIndexes.has(key)) {
+        return; // Already exists, skip
+    }
     try {
         await db.execute(`CREATE INDEX ${indexName} ON \`${table}\` (${columns})`);
         console.log(`  ✅ Added index ${table}.${indexName}`);
+        existingIndexes.add(key);
     } catch (err) {
         if (err.errno === 1061 || err.code === 'ER_DUP_KEYNAME') {
-            // index already exists — fine
+            existingIndexes.add(key);
         } else {
             console.error(`  ⚠️  ${table}.${indexName}: ${err.message}`);
         }
@@ -390,11 +424,17 @@ const runMigrations = async () => {
         ['NIFTY', 1, 50, 'NFO'], ['BANKNIFTY', 1, 50, 'NFO'], ['FINNIFTY', 1, 50, 'NFO'], ['MIDCPNIFTY', 1, 50, 'NFO'],
     ];
 
-    for (const [sym, lot, margin, mtype] of seedScrips) {
+    if (seedScrips.length > 0) {
+        const values = [];
+        const placeholders = [];
+        for (const [sym, lot, margin, mtype] of seedScrips) {
+            placeholders.push('(?, ?, ?, ?)');
+            values.push(sym, lot, margin, mtype);
+        }
         try {
             await db.execute(
-                'INSERT IGNORE INTO scrip_data (symbol, lot_size, margin_req, market_type) VALUES (?, ?, ?, ?)',
-                [sym, lot, margin, mtype]
+                `INSERT IGNORE INTO scrip_data (symbol, lot_size, margin_req, market_type) VALUES ${placeholders.join(', ')}`,
+                values
             );
         } catch (_) { }
     }
@@ -792,16 +832,23 @@ const runMigrations = async () => {
     const seedGroupItems = async (groupName, items, exchange = 'NSE') => {
         const gid = groupMap[groupName];
         if (!gid) return;
+        if (items.length === 0) return;
+        const values = [];
+        const placeholders = [];
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
             const symbol = typeof item === 'string' ? item : item.symbol;
             const name = item.name || null;
             const category = item.category || null;
+            placeholders.push('(?, ?, ?, ?, ?, ?)');
+            values.push(gid, symbol, name, category, exchange, i);
+        }
+        try {
             await db.execute(`
                 INSERT IGNORE INTO market_group_items (group_id, symbol, name, category, exchange, sort_order) 
-                VALUES (?, ?, ?, ?, ?, ?)
-            `, [gid, symbol, name, category, exchange, i]);
-        }
+                VALUES ${placeholders.join(', ')}
+            `, values);
+        } catch (_) { }
     };
 
     // Symbol Lists (Moved from hardcoded arrays)
@@ -823,8 +870,6 @@ const runMigrations = async () => {
         { symbol: 'AVAX/USD', name: 'Avalanche', category: 'crypto' }
     ];
     const forex = [
-        { symbol: 'XAU/USD', name: 'Gold', category: 'forex' },
-        { symbol: 'XAG/USD', name: 'Silver', category: 'forex' },
         { symbol: 'USD/INR', name: 'USD/INR', category: 'forex' },
         { symbol: 'GBP/USD', name: 'GBP/USD', category: 'forex' },
         { symbol: 'USD/JPY', name: 'USD/JPY', category: 'forex' },
@@ -939,29 +984,35 @@ const runMigrations = async () => {
         'script_testing', 'commodity_forex_crypto_lot_sizes'
     ];
 
-    for (const table of criticalTables) {
-        try {
-            // 1. Check if table actually has an 'id' column
-            const [cols] = await db.execute(`SHOW COLUMNS FROM \`${table}\` LIKE 'id'`);
-            if (cols.length === 0) continue;
+    try {
+        const [tableInfos] = await db.execute(
+            `SELECT TABLE_NAME, AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()`
+        );
+        const autoIncMap = {};
+        tableInfos.forEach(row => {
+            autoIncMap[row.TABLE_NAME.toLowerCase()] = row.AUTO_INCREMENT;
+        });
 
-            // 2. Check current AUTO_INCREMENT status
-            const [[info]] = await db.execute(
-                `SELECT AUTO_INCREMENT FROM information_schema.TABLES
-                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
-                [table]
-            );
+        for (const table of criticalTables) {
+            try {
+                const currentAutoInc = autoIncMap[table.toLowerCase()];
+                if (currentAutoInc === null || currentAutoInc === undefined) {
+                    // Check if table actually has an 'id' column
+                    const [cols] = await db.execute(`SHOW COLUMNS FROM \`${table}\` LIKE 'id'`);
+                    if (cols.length === 0) continue;
 
-            if (!info?.AUTO_INCREMENT) {
-                const [[maxRow]] = await db.execute(`SELECT MAX(id) as max_id FROM \`${table}\``);
-                const nextId = (maxRow?.max_id || 0) + 1;
-                await db.execute(`ALTER TABLE \`${table}\` MODIFY id INT AUTO_INCREMENT`);
-                await db.execute(`ALTER TABLE \`${table}\` AUTO_INCREMENT = ${nextId}`);
-                console.log(`  ✅ ${table}: AUTO_INCREMENT restored = ${nextId}`);
+                    const [[maxRow]] = await db.execute(`SELECT MAX(id) as max_id FROM \`${table}\``);
+                    const nextId = (maxRow?.max_id || 0) + 1;
+                    await db.execute(`ALTER TABLE \`${table}\` MODIFY id INT AUTO_INCREMENT`);
+                    await db.execute(`ALTER TABLE \`${table}\` AUTO_INCREMENT = ${nextId}`);
+                    console.log(`  ✅ ${table}: AUTO_INCREMENT restored = ${nextId}`);
+                }
+            } catch (err) {
+                // Table might not exist yet — silently skip
             }
-        } catch (err) {
-            // Table might not exist yet — silently skip
         }
+    } catch (err) {
+        console.error('⚠️ Failed to check AUTO_INCREMENT status:', err.message);
     }
 
     console.log('✅ DB migrations complete\n');

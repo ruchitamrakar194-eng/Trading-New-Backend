@@ -437,6 +437,10 @@ async function buildFutSymbols(exchange, baseNames, maxExpiries = 2) {
 let dashboardSymbolsRefreshing = false;
 async function refreshDashboardSymbols() {
     if (dashboardSymbolsRefreshing) return;
+    if (!kiteService.isAuthenticated()) {
+        console.warn('⚠️ Kite not connected. Please login first via /api/kite/login');
+        return;
+    }
     dashboardSymbolsRefreshing = true;
     try {
         console.log('🔄 Rebuilding Dashboard Symbols Cache in Background...');

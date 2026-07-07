@@ -513,7 +513,7 @@ class AllTickService {
             };
             mds.dirtySymbols.add(unslashedSymbol);
 
-            console.log(`[ALLTICKS] 📡 Broadcast: ${slashedSymbol} | Bid: ${item.bid} Ask: ${item.ask}`);
+            // console.log(`[ALLTICKS] 📡 Broadcast: ${slashedSymbol} | Bid: ${item.bid} Ask: ${item.ask}`);
         } catch (err) {
             console.error('[ALLTICKS] Broadcast error:', err.message);
         }

@@ -415,28 +415,28 @@ class MarketDataService extends EventEmitter {
 
                 // DEBUG: Log what we're sending
                 if (crypto.length > 0) {
-                    console.log(`[socket] Sending crypto (${crypto.length}): ${crypto[0].symbol} | Bid: ${crypto[0].bid} Ask: ${crypto[0].ask} LTP: ${crypto[0].ltp}`);
+                    // console.log(`[socket] Sending crypto (${crypto.length}): ${crypto[0].symbol} | Bid: ${crypto[0].bid} Ask: ${crypto[0].ask} LTP: ${crypto[0].ltp}`);
                     try {
                         io.emit('market_data_update', { type: 'crypto', data: crypto });
-                        console.log(`[socket] Crypto broadcast emitted successfully`);
+                        // console.log(`[socket] Crypto broadcast emitted successfully`);
                     } catch (emitErr) {
                         console.error(`[socket] Failed to emit crypto data:`, emitErr.message);
                     }
                 }
                 if (forex.length > 0) {
-                    console.log(`[socket] Sending forex (${forex.length}): ${forex[0].symbol} | Bid: ${forex[0].bid} Ask: ${forex[0].ask} LTP: ${forex[0].ltp}`);
+                    // console.log(`[socket] Sending forex (${forex.length}): ${forex[0].symbol} | Bid: ${forex[0].bid} Ask: ${forex[0].ask} LTP: ${forex[0].ltp}`);
                     try {
                         io.emit('market_data_update', { type: 'forex', data: forex });
-                        console.log(`[socket] Forex broadcast emitted successfully`);
+                        // console.log(`[socket] Forex broadcast emitted successfully`);
                     } catch (emitErr) {
                         console.error(`[socket] Failed to emit forex data:`, emitErr.message);
                     }
                 }
                 if (commodity.length > 0) {
-                    console.log(`[socket] Sending commodity (${commodity.length}): ${commodity[0].symbol} | Bid: ${commodity[0].bid} Ask: ${commodity[0].ask} LTP: ${commodity[0].ltp}`);
+                    // console.log(`[socket] Sending commodity (${commodity.length}): ${commodity[0].symbol} | Bid: ${commodity[0].bid} Ask: ${commodity[0].ask} LTP: ${commodity[0].ltp}`);
                     try {
                         io.emit('market_data_update', { type: 'commodity', data: commodity });
-                        console.log(`[socket] Commodity broadcast emitted successfully`);
+                        // console.log(`[socket] Commodity broadcast emitted successfully`);
                     } catch (emitErr) {
                         console.error(`[socket] Failed to emit commodity data:`, emitErr.message);
                     }

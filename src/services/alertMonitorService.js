@@ -10,6 +10,9 @@ class AlertMonitor {
     constructor() {
         this.triggeredAlerts = new Set(); // Track already-triggered alerts to prevent duplicates
         this.io = null; // Socket.io instance
+        this.alertsCache = null;
+        this.alertsCacheTime = 0;
+        this.fetchingPromise = null;
     }
 
     /**
@@ -18,6 +21,37 @@ class AlertMonitor {
     init(io) {
         this.io = io;
         console.log('✅ Alert Monitor initialized');
+    }
+
+    async getActiveAlerts() {
+        const now = Date.now();
+        if (this.alertsCache && (now - this.alertsCacheTime < 5000)) {
+            return this.alertsCache;
+        }
+
+        if (this.fetchingPromise) {
+            return this.fetchingPromise;
+        }
+
+        this.fetchingPromise = (async () => {
+            try {
+                const [allAlerts] = await db.execute(
+                    `SELECT id, user_id, symbol, type, target_price, status
+                     FROM alerts
+                     WHERE status = 'active'`
+                );
+                this.alertsCache = allAlerts;
+                this.alertsCacheTime = Date.now();
+                return allAlerts;
+            } catch (err) {
+                console.error('[AlertMonitor] Error fetching active alerts:', err.message);
+                return this.alertsCache || [];
+            } finally {
+                this.fetchingPromise = null;
+            }
+        })();
+
+        return this.fetchingPromise;
     }
 
     /**
@@ -32,16 +66,8 @@ class AlertMonitor {
             const cleanSymbol = symbol.toUpperCase().trim().replace(/\s+/g, '');
 
 
-            // Fetch ALL active alerts and do fuzzy matching
-            const [allAlerts] = await db.execute(
-                `SELECT id, user_id, symbol, type, target_price, status
-                 FROM alerts
-                 WHERE status = 'active'`
-            );
-
-            if (allAlerts.length > 0) {
-                // Do nothing
-            }
+            // Fetch ALL active alerts from cache
+            const allAlerts = await this.getActiveAlerts();
 
             // ✅ Filter alerts that match this symbol (fuzzy match with base symbol support)
             const matchingAlerts = allAlerts.filter(alert => {
@@ -97,6 +123,11 @@ class AlertMonitor {
                 if (shouldTrigger && !this.triggeredAlerts.has(alert.id)) {
                     this.triggeredAlerts.add(alert.id);
 
+                    // Immediately remove from active cache so it doesn't get evaluated in subsequent checks
+                    if (this.alertsCache) {
+                        this.alertsCache = this.alertsCache.filter(a => a.id !== alert.id);
+                    }
+
                     console.log(`[AlertMonitor] 🔔 Triggering alert #${alert.id} for user #${alert.user_id}`);
 
                     // Update in database
@@ -130,10 +161,19 @@ class AlertMonitor {
     }
 
     /**
+     * Invalidate the active alerts cache to force a reload on the next check
+     */
+    invalidateCache() {
+        this.alertsCache = null;
+        this.alertsCacheTime = 0;
+    }
+
+    /**
      * Reset triggered alerts when they're manually reset
      */
     resetAlert(alertId) {
         this.triggeredAlerts.delete(alertId);
+        this.invalidateCache();
     }
 
     /**
@@ -141,6 +181,7 @@ class AlertMonitor {
      */
     removeAlert(alertId) {
         this.triggeredAlerts.delete(alertId);
+        this.invalidateCache();
     }
 }
 
