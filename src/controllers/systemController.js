@@ -2,6 +2,50 @@ const db = require('../config/db');
 
 const logAction = async (userId, action, target, details) => {
     try {
+        // 1. Check if the initiator (userId) is a demo user
+        if (userId) {
+            const [[user]] = await db.execute('SELECT is_demo FROM users WHERE id = ?', [userId]);
+            if (user && user.is_demo === 1) {
+                return; // Skip logging for demo user
+            }
+        }
+
+        // 2. Check if the details describe a demo user or demo trade
+        if (typeof details === 'string') {
+            // Try to extract user ID from parentheses, e.g. "username (123)"
+            const userMatch = details.match(/\((\d+)\)/);
+            if (userMatch) {
+                const extractedUserId = parseInt(userMatch[1]);
+                const [[tgtUser]] = await db.execute('SELECT is_demo FROM users WHERE id = ?', [extractedUserId]);
+                if (tgtUser && tgtUser.is_demo === 1) {
+                    return; // Skip logging
+                }
+            }
+
+            // Try to extract user ID from patterns like "user ID 123", "user #123", "user ID: 123"
+            const userPatternMatch = details.match(/(?:user ID|user #|user ID:)\s*(\d+)/i);
+            if (userPatternMatch) {
+                const extractedUserId = parseInt(userPatternMatch[1]);
+                const [[tgtUser]] = await db.execute('SELECT is_demo FROM users WHERE id = ?', [extractedUserId]);
+                if (tgtUser && tgtUser.is_demo === 1) {
+                    return; // Skip logging
+                }
+            }
+
+            // Try to extract trade ID from patterns like "Trade 123", "trade ID 123", "entry #123"
+            const tradeMatch = details.match(/(?:Trade|trade|entry|ID:)\s*#?(\d+)/i);
+            if (tradeMatch) {
+                const extractedTradeId = parseInt(tradeMatch[1]);
+                const [[tradeUser]] = await db.execute(
+                    'SELECT u.is_demo FROM trades t JOIN users u ON t.user_id = u.id WHERE t.id = ?',
+                    [extractedTradeId]
+                );
+                if (tradeUser && tradeUser.is_demo === 1) {
+                    return; // Skip logging
+                }
+            }
+        }
+
         await db.execute(
             'INSERT INTO action_ledger (admin_id, action_type, target_table, description) VALUES (?, ?, ?, ?)',
             [userId, action, target, details]

@@ -92,7 +92,7 @@ const getClientLiveM2M = async (req, res) => {
 
         // 1. Fetch all relevant trades (Non-Deleted)
         let tradeQuery = `
-            SELECT t.*, u.username, u.full_name, u.role as user_role, u.balance, cs.config_json as user_config
+            SELECT t.*, u.username, u.full_name, u.role as user_role, u.balance, u.is_demo, cs.config_json as user_config
             FROM trades t
             JOIN users u ON t.user_id = u.id
             LEFT JOIN client_settings cs ON u.id = cs.user_id
@@ -349,7 +349,14 @@ const getClientLiveM2M = async (req, res) => {
             }
         }
 
+        const isSingleTraderRequest = (role === 'TRADER') || (filterUserId && filterUserRole === 'TRADER');
+
         trades.forEach(trade => {
+            // Exclude demo trades for global aggregations / broker dashboards
+            if (trade.is_demo === 1 && !isSingleTraderRequest) {
+                return;
+            }
+
             const mType = (trade.market_type || 'MCX').toUpperCase();
             let segment = mType === 'EQUITY' ? 'nse' : mType.toLowerCase();
 
@@ -873,9 +880,9 @@ module.exports = {
             const mockEngine = require('../utils/mockEngine');
             const { getMcxBaseScrip } = require('../utils/symbolHelper');
 
-            // 1. Get all traders under this broker
+            // 1. Get all traders under this broker (excluding demo accounts)
             const [traders] = await db.execute(
-                'SELECT id, username, balance FROM users WHERE parent_id = ? AND role = "TRADER"',
+                'SELECT id, username, balance FROM users WHERE parent_id = ? AND role = "TRADER" AND is_demo = 0',
                 [brokerId]
             );
 

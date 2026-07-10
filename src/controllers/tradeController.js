@@ -360,12 +360,7 @@ const placeOrder = async (req, res) => {
             return res.status(400).json({ message: 'Quantity must be a positive number' });
         }
 
-        // ─── DEMO ACCOUNT CHECK ───────────────────────────────────────────────
-        if (clientConfig.isDemoAccount) {
-            return res.status(400).json({
-                message: `Trading is disabled for demo accounts. Please upgrade to a live account.`
-            });
-        }
+        // ─── DEMO ACCOUNT CHECK REMOVED ───────────────────────────────────────
 
         // ─── SEGMENT ENABLE/DISABLE CHECK ─────────────────────────────────────
         if (marketType === 'MCX' && clientConfig.mcxTrading === false) {
@@ -1457,22 +1452,26 @@ const getActivePositions = async (req, res) => {
         if (role === 'TRADER') {
             query += ` AND t.user_id = ?`;
             params.push(id);
-        } else if (role === 'SUPERADMIN') {
-            // Superadmins see all active positions (no restriction filter needed)
-        } else if (role === 'ADMIN') {
-            query += ` AND (t.created_by = ? OR t.user_id IN (
-                SELECT u.id FROM users u
-                LEFT JOIN client_settings cs ON u.id = cs.user_id
-                WHERE u.parent_id = ? OR cs.broker_id IN (SELECT id FROM users WHERE parent_id = ?)
-            ))`;
-            params.push(id, id, id);
-        } else if (role === 'BROKER') {
-            query += ` AND (t.created_by = ? OR t.user_id IN (
-                SELECT u.id FROM users u
-                LEFT JOIN client_settings cs ON u.id = cs.user_id
-                WHERE u.parent_id = ? OR cs.broker_id = ?
-            ))`;
-            params.push(id, id, id);
+        } else {
+            // Exclude demo users for all non-trader roles
+            query += ` AND t.user_id IN (SELECT id FROM users WHERE is_demo = 0)`;
+            if (role === 'SUPERADMIN') {
+                // Superadmins see all active positions (no restriction filter needed)
+            } else if (role === 'ADMIN') {
+                query += ` AND (t.created_by = ? OR t.user_id IN (
+                    SELECT u.id FROM users u
+                    LEFT JOIN client_settings cs ON u.id = cs.user_id
+                    WHERE u.parent_id = ? OR cs.broker_id IN (SELECT id FROM users WHERE parent_id = ?)
+                ))`;
+                params.push(id, id, id);
+            } else if (role === 'BROKER') {
+                query += ` AND (t.created_by = ? OR t.user_id IN (
+                    SELECT u.id FROM users u
+                    LEFT JOIN client_settings cs ON u.id = cs.user_id
+                    WHERE u.parent_id = ? OR cs.broker_id = ?
+                ))`;
+                params.push(id, id, id);
+            }
         }
 
         query += ` GROUP BY t.symbol, t.type, t.market_type ORDER BY t.symbol ASC`;
@@ -1535,6 +1534,9 @@ const getTrades = async (req, res) => {
         if (user_id) {
             query += ' AND t.user_id = ?';
             params.push(user_id);
+        } else if (req.user.role !== 'TRADER') {
+            // Exclude demo trades for overall lists viewed by admin/broker
+            query += ' AND u.is_demo = 0';
         }
 
         // Role-based visibility isolation (consistent for both global list and client detail view)

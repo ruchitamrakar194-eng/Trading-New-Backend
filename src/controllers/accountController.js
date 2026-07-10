@@ -34,7 +34,7 @@ const getHierarchyAccounts = async (req, res) => {
         let query = `SELECT u.id, u.username, u.full_name, u.role, bs.share_pl_pct, bs.share_brokerage_pct
                      FROM users u
                      LEFT JOIN broker_shares bs ON bs.user_id = u.id
-                     WHERE (u.parent_id = ? OR u.id = ?)`;
+                     WHERE (u.parent_id = ? OR u.id = ?) AND u.is_demo = 0`;
         let queryParams = [loggedInId, loggedInId];
 
         if (roleFilter === 'BROKER') {
@@ -56,7 +56,7 @@ const getHierarchyAccounts = async (req, res) => {
             const [clients] = await db.execute(
                 `SELECT DISTINCT u.id FROM users u
                  LEFT JOIN client_settings cs ON cs.user_id = u.id
-                 WHERE u.role = ? AND (u.parent_id = ? OR cs.broker_id = ?)`,
+                 WHERE u.role = ? AND (u.parent_id = ? OR cs.broker_id = ?) AND u.is_demo = 0`,
                 ['TRADER', broker.id, broker.id]
             );
 
@@ -135,7 +135,7 @@ const getHierarchyAccounts = async (req, res) => {
 
 const getNegativeBalances = async (req, res) => {
     try {
-        const [rows] = await db.execute('SELECT id, username, balance FROM users WHERE balance < 0');
+        const [rows] = await db.execute('SELECT id, username, balance FROM users WHERE balance < 0 AND is_demo = 0');
         res.json(rows);
     } catch (err) {
         console.error(err);
