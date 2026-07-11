@@ -1,7 +1,7 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-// Force local mode if DATABASE_URL is commented out or missing in .env (prevents shell environment leaks)
+// Force local mode if DATABASE_URL is commented out or missing in .env (prevents shell environment leaks
 const fs = require('fs');
 const path = require('path');
 const envPath = path.resolve(__dirname, '..', '..', '.env');
