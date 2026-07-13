@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   const token = req.header('Authorization')?.replace('Bearer ', '');
   
   if (!token) {
@@ -10,6 +10,14 @@ const authMiddleware = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
+
+    // Check active session token in DB to prevent concurrent logins
+    const db = require('../config/db');
+    const [rows] = await db.execute('SELECT session_token FROM users WHERE id = ?', [decoded.id]);
+    if (rows.length === 0 || rows[0].session_token !== token) {
+      return res.status(401).json({ message: 'Session invalidated: Logged in on another device', concurrent_logout: true });
+    }
+
     next();
   } catch (err) {
     res.status(401).json({ message: 'Token is not valid' });

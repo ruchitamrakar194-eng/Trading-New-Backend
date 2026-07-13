@@ -110,45 +110,9 @@ const startExpirySquareOffJob = () => {
                         if (isCrypto && !isCryptoTriggered) continue;
                         if (isForex && !isForexTriggered) continue;
                         if (isComex && !isComexTriggered) continue;
-                        if (isCommodity && !isForexTriggered) continue; 
+                        if (isCommodity && !isComexTriggered) continue; 
 
-                        let holdingMarginRequired = 0;
-
-                        if (isMCX) {
-                            // ✅ MCX LOGIC (Per-Lot)
-                            const base = getMcxBaseScrip(trade.symbol);
-                            const defaultHolding = 1000000;
-                            let holdingExposure = parseFloat(userConfig?.mcxHoldingMargin || defaultHolding);
-
-                            if (userConfig?.mcxLotMargins && userConfig.mcxLotMargins[base]?.HOLDING) {
-                                holdingExposure = parseFloat(userConfig.mcxLotMargins[base].HOLDING);
-                            } else if (userConfig?.mcxLotMargins && userConfig.mcxLotMargins[trade.symbol]?.HOLDING) {
-                                holdingExposure = parseFloat(userConfig.mcxLotMargins[trade.symbol].HOLDING);
-                            }
-
-                            holdingMarginRequired = holdingExposure * trade.qty;
-                        }
-                        else if (isNSE) {
-                            // ✅ NSE/NFO LOGIC (Exposure-based: Turnover / Divisor)
-                            const holdingDivisor = parseFloat(userConfig?.equityHoldingMargin || 100);
-                            const qty = parseFloat(trade.actual_qty || trade.qty || 0);
-                            const entryPrice = parseFloat(trade.entry_price || 0);
-                            const turnover = entryPrice * qty;
-
-                            holdingMarginRequired = turnover / (holdingDivisor || 1);
-                        }
-                        else if (isCrypto || isForex || isComex || isCommodity) {
-                            // ✅ GLOBAL LOGIC (Crypto/Comex/Forex/Commodity)
-                            const segKey = `${mType.toLowerCase()}Config`;
-                            const fallbackKey = mType === 'COMMODITY' ? 'forexConfig' : null;
-                            const segConfig = userConfig[segKey] || (fallbackKey ? userConfig[fallbackKey] : {}) || {};
-                            const holdingExposure = parseFloat(segConfig.holdingMargin || segConfig.intradayMargin || 100);
-                            const qty = parseFloat(trade.actual_qty || trade.qty || 0);
-                            const entryPrice = parseFloat(trade.entry_price || 0);
-                            const turnover = entryPrice * qty;
-
-                            holdingMarginRequired = turnover / (holdingExposure || 1);
-                        }
+                        const holdingMarginRequired = MarginUtils.calculateTotalRequiredHoldingMargin([trade], userConfig);
 
                         console.log(`[ExpirySquareOff] 📊 Checking Trade #${trade.id} (${trade.symbol}): Required: ${holdingMarginRequired.toFixed(2)}, Available: ${trade.balance}`);
 

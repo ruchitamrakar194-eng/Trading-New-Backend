@@ -60,6 +60,9 @@ const login = async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    // Save token as the active session token to prevent concurrent logins
+    await db.execute('UPDATE users SET session_token = ? WHERE id = ?', [token, user.id]);
+
     // Track Login IP
     try {
         let ip = req.headers['x-forwarded-for'] || 

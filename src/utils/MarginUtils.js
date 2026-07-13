@@ -9,7 +9,7 @@ const MarginUtils = {
         for (const trade of trades) {
             const qtyNum = parseFloat(trade.qty || 0);
             const entryPrice = parseFloat(trade.entry_price || 0);
-            const lotSize = parseFloat(trade.lot_size || trade.multiplier || 1);
+            const lotSize = parseFloat(trade.lot_size || trade.lot_size_at_entry || trade.multiplier || 1);
             const turnover = entryPrice * qtyNum * lotSize;
             let tradeMargin = 0;
 

@@ -219,9 +219,9 @@ const placeOrder = async (req, res) => {
             marketType = sym.startsWith('NFO:') ? 'OPTIONS' : 'EQUITY';
         } else if (MCX_SYMBOLS.some(s => sym.includes(s))) {
             marketType = 'MCX';
-        } else if (['BTC', 'ETH', 'SOL'].some(c => sym.startsWith(c)) && sym.endsWith('USDT')) {
+        } else if (['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'DOT', 'AVAX', 'LTC', 'LINK'].some(c => sym.includes(c)) || sym.includes('USDT')) {
             marketType = 'CRYPTO';
-        } else if (['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD'].some(f => sym.includes(f))) {
+        } else if (['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'GBP/USD', 'EUR/USD', 'USD/JPY', 'USD/CHF', 'AUD/CAD'].some(f => sym.includes(f))) {
             marketType = 'FOREX';
         } else if (['XAU/USD', 'XAG/USD', 'USOIL', 'NGAS'].some(c => sym.includes(c))) {
             marketType = 'COMMODITY';
@@ -378,7 +378,7 @@ const placeOrder = async (req, res) => {
                 message: `OPTIONS Trading is disabled for your account. Please enable it to trade.`
             });
         }
-        if (marketType === 'COMEX' && clientConfig.comexTrading === false) {
+        if ((marketType === 'COMEX' || marketType === 'COMMODITY') && clientConfig.comexTrading === false) {
             return res.status(400).json({
                 message: `COMEX Trading is disabled for your account. Please enable it to trade.`
             });
@@ -401,7 +401,7 @@ const placeOrder = async (req, res) => {
         else if (marketType === 'OPTIONS') minTimeSecondsForScalping = parseInt(clientConfig.optionsMinTimeToBookProfit || 0);
         else if (marketType === 'CRYPTO') minTimeSecondsForScalping = parseInt((clientConfig.cryptoConfig || {}).minTimeToBookProfit || 0);
         else if (marketType === 'FOREX') minTimeSecondsForScalping = parseInt((clientConfig.forexConfig || {}).minTimeToBookProfit || 0);
-        else if (marketType === 'COMEX') minTimeSecondsForScalping = parseInt((clientConfig.comexConfig || {}).minTimeToBookProfit || 0);
+        else if (marketType === 'COMEX' || marketType === 'COMMODITY') minTimeSecondsForScalping = parseInt((clientConfig.comexConfig || {}).minTimeToBookProfit || 0);
 
         let scalpingStopLossEnabled = false;
         if (marketType === 'MCX') scalpingStopLossEnabled = clientConfig.mcxScalpingStopLoss === 'Enabled';
@@ -409,7 +409,7 @@ const placeOrder = async (req, res) => {
         else if (marketType === 'OPTIONS') scalpingStopLossEnabled = clientConfig.optionsScalpingStopLoss === 'Enabled';
         else if (marketType === 'CRYPTO') scalpingStopLossEnabled = (clientConfig.cryptoConfig || {}).scalpingStopLoss === 'Enabled';
         else if (marketType === 'FOREX') scalpingStopLossEnabled = (clientConfig.forexConfig || {}).scalpingStopLoss === 'Enabled';
-        else if (marketType === 'COMEX') scalpingStopLossEnabled = (clientConfig.comexConfig || {}).scalpingStopLoss === 'Enabled';
+        else if (marketType === 'COMEX' || marketType === 'COMMODITY') scalpingStopLossEnabled = (clientConfig.comexConfig || {}).scalpingStopLoss === 'Enabled';
 
         if (order_type !== 'MARKET' && !scalpingStopLossEnabled && minTimeSecondsForScalping > 0) {
             // Check active (OPEN) trades of the same symbol in memory
@@ -448,7 +448,7 @@ const placeOrder = async (req, res) => {
             if (marketType === 'OPTIONS' && clientConfig.banOptionsLimitOrder) {
                 return res.status(400).json({ message: `Limit orders are banned for OPTIONS segment` });
             }
-            if (marketType === 'COMEX' && clientConfig.comexConfig?.banLimitOrder) {
+            if ((marketType === 'COMEX' || marketType === 'COMMODITY') && clientConfig.comexConfig?.banLimitOrder) {
                 return res.status(400).json({ message: `Limit orders are banned for COMEX segment` });
             }
             if (marketType === 'FOREX' && clientConfig.forexConfig?.banLimitOrder) {
@@ -713,7 +713,7 @@ const placeOrder = async (req, res) => {
                     segmentOrdersAway = parseInt(clientConfig.equityOrdersAway || 0);
                 } else if (marketType === 'OPTIONS') {
                     segmentOrdersAway = parseInt(clientConfig.optionsOrdersAway || 0);
-                } else if (marketType === 'COMEX') {
+                } else if (marketType === 'COMEX' || marketType === 'COMMODITY') {
                     segmentOrdersAway = parseInt(clientConfig.comexConfig?.ordersAway || 0);
                 } else if (marketType === 'FOREX') {
                     segmentOrdersAway = parseInt(clientConfig.forexConfig?.ordersAway || 0);
@@ -808,7 +808,7 @@ const placeOrder = async (req, res) => {
             const brokerSegmentConfig = brokerSegments.segmentConfig || {};
             let segmentKey = null;
             if (marketType === 'MCX') segmentKey = 'mcx_all_future';
-            else if (marketType === 'COMEX') segmentKey = 'comex_commodity_future';
+            else if (marketType === 'COMEX' || marketType === 'COMMODITY') segmentKey = 'comex_commodity_future';
             else if (marketType === 'FOREX') segmentKey = 'forex';
             else if (marketType === 'CRYPTO') segmentKey = 'crypto';
             else if (marketType === 'EQUITY') segmentKey = 'equity';
@@ -927,7 +927,7 @@ const placeOrder = async (req, res) => {
         }
 
         // ─── INTERNATIONAL SEGMENT VALIDATIONS ──────────────────────────────
-        if (marketType === 'COMEX' && clientConfig.comexTrading) {
+        if ((marketType === 'COMEX' || marketType === 'COMMODITY') && clientConfig.comexTrading) {
             const comexConfig = clientConfig.comexConfig || {};
             const minLot = parseInt(comexConfig.minLot || 1);
             const maxLot = parseInt(comexConfig.maxLot || 100);
@@ -941,7 +941,7 @@ const placeOrder = async (req, res) => {
 
             const comexMaxLotScrip = parseInt(comexConfig.maxLotScrip || 0);
             if (comexMaxLotScrip > 0) {
-                const currentComexQty = openTradesRows.filter(t => t.symbol === symbol && (t.market_type || '').toUpperCase() === 'COMEX').reduce((sum, t) => sum + parseFloat(t.qty || 0), 0);
+                const currentComexQty = openTradesRows.filter(t => t.symbol === symbol && ['COMEX', 'COMMODITY'].includes((t.market_type || '').toUpperCase())).reduce((sum, t) => sum + parseFloat(t.qty || 0), 0);
                 if (currentComexQty + qtyNum > comexMaxLotScrip) {
                     return res.status(400).json({ message: `Max lot size for ${symbol} (COMEX) is ${comexMaxLotScrip}` });
                 }
@@ -949,7 +949,7 @@ const placeOrder = async (req, res) => {
 
             const comexMaxSizeAll = parseInt(comexConfig.maxSizeAll || 0);
             if (comexMaxSizeAll > 0) {
-                const currentComexAll = openTradesRows.filter(t => (t.market_type || '').toUpperCase() === 'COMEX').reduce((sum, t) => sum + parseFloat(t.qty || 0), 0);
+                const currentComexAll = openTradesRows.filter(t => ['COMEX', 'COMMODITY'].includes((t.market_type || '').toUpperCase())).reduce((sum, t) => sum + parseFloat(t.qty || 0), 0);
                 if (currentComexAll + qtyNum > comexMaxSizeAll) {
                     return res.status(400).json({ message: `Max COMEX position limit is ${comexMaxSizeAll}. Current: ${currentComexAll}, New: ${qtyNum}` });
                 }
@@ -1943,7 +1943,7 @@ const closeTrade = async (req, res) => {
         else if (trade.market_type === 'OPTIONS') minTimeSeconds = parseInt(clientConfig.optionsMinTimeToBookProfit || 0);
         else if (trade.market_type === 'CRYPTO') minTimeSeconds = parseInt((clientConfig.cryptoConfig || {}).minTimeToBookProfit || 0);
         else if (trade.market_type === 'FOREX') minTimeSeconds = parseInt((clientConfig.forexConfig || {}).minTimeToBookProfit || 0);
-        else if (trade.market_type === 'COMEX') minTimeSeconds = parseInt((clientConfig.comexConfig || {}).minTimeToBookProfit || 0);
+        else if (trade.market_type === 'COMEX' || trade.market_type === 'COMMODITY') minTimeSeconds = parseInt((clientConfig.comexConfig || {}).minTimeToBookProfit || 0);
 
         const entryTime = new Date(trade.entry_time);
         const now = new Date();
