@@ -89,6 +89,7 @@ const runMigrations = async () => {
             exposure_multiplier  INT DEFAULT 1,
             city                 VARCHAR(100) DEFAULT NULL,
             is_demo              TINYINT(1) DEFAULT 0,
+            session_token        VARCHAR(500) DEFAULT NULL,
             created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -96,6 +97,9 @@ const runMigrations = async () => {
 
     // Add email column if users table existed before email was added
     await addColumn('users', 'email', 'VARCHAR(255) DEFAULT NULL AFTER full_name');
+
+    // Add session_token column if users table existed before it was added
+    await addColumn('users', 'session_token', 'VARCHAR(500) DEFAULT NULL');
 
     // ─── 2. KYC & DOCUMENTS ────────────────────────────────────────────────────
 
