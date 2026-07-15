@@ -5,8 +5,9 @@ async function run() {
         console.log("Adding COPPER Mini & Custom symbols...");
 
         const lotSizes = [
-            { symbol: 'COPPERM', category: 'COMMODITY', lot_size: 2500, usdinr_value: 94.53 },
-            { symbol: 'MCOPPER', category: 'COMMODITY', lot_size: 2500, usdinr_value: 94.53 },
+            { symbol: 'COPPER', category: 'COMMODITY', lot_size: 2500, usdinr_value: 94.53 },
+            { symbol: 'COPPERM', category: 'COMMODITY', lot_size: 250, usdinr_value: 94.53 },
+            { symbol: 'MCOPPER', category: 'COMMODITY', lot_size: 250, usdinr_value: 94.53 },
         ];
 
         for (const item of lotSizes) {

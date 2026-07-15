@@ -943,6 +943,21 @@ const runMigrations = async () => {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Seed/Update standard commodity lot sizes (e.g. COPPER = 2500, COPPERM = 250)
+    const comexLotSizes = [
+        { symbol: 'COPPER', category: 'COMMODITY', lot_size: 2500.0, usdinr_value: 94.53 },
+        { symbol: 'COPPERM', category: 'COMMODITY', lot_size: 250.0, usdinr_value: 94.53 },
+        { symbol: 'MCOPPER', category: 'COMMODITY', lot_size: 250.0, usdinr_value: 94.53 }
+    ];
+
+    for (const item of comexLotSizes) {
+        await db.execute(`
+            INSERT INTO commodity_forex_crypto_lot_sizes (symbol, category, lot_size, usdinr_value)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE lot_size = VALUES(lot_size)
+        `, [item.symbol, item.category, item.lot_size, item.usdinr_value]);
+    }
+
     // ─── PERFORMANCE INDEXES ───────────────────────────────────────────────────
     console.log('\n📊 Adding performance indexes...');
 

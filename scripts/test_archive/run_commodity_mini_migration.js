@@ -19,7 +19,7 @@ async function run() {
             { symbol: 'XAGUSDM', category: 'COMMODITY', lot_size: 500, usdinr_value: 94.53, name: 'Silver Mini' },
             { symbol: 'USOILM', category: 'COMMODITY', lot_size: 100, usdinr_value: 94.53, name: 'Crude Oil Mini' },
             { symbol: 'NGASM', category: 'COMMODITY', lot_size: 1000, usdinr_value: 94.53, name: 'Natural Gas Mini' },
-            { symbol: 'COPPERM', category: 'COMMODITY', lot_size: 2500, usdinr_value: 94.53, name: 'Copper Mini' }
+            { symbol: 'COPPERM', category: 'COMMODITY', lot_size: 250, usdinr_value: 94.53, name: 'Copper Mini' }
         ];
 
         // 3. Upsert into commodity_forex_crypto_lot_sizes
